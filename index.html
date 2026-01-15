@@ -242,6 +242,25 @@
             transform: translateX(0);
         }
 
+        /* Footer inside container */
+        .site-footer {
+            text-align: center;
+            padding: 24px 0 0 0;
+            margin-top: 32px;
+            border-top: 1px solid #eee;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .site-footer a {
+            color: #1e6ff0;
+            text-decoration: none;
+        }
+
+        .site-footer a:hover {
+            text-decoration: underline;
+        }
+
         @media (max-width: 600px) {
             .container {
                 padding: 22px 18px;
@@ -255,6 +274,10 @@
             }
             .prompt-box {
                 font-size: 0.9em;
+            }
+            .site-footer {
+                padding-top: 20px;
+                font-size: 13px;
             }
         }
     </style>
@@ -315,6 +338,12 @@
             </div>
             <p class="info-text">ChatGPT will generate the vocabulary table (and .docx if requested)</p>
         </div>
+
+        <!-- Footer inside the main container -->
+        <footer class="site-footer">
+            Автор: <a href="https://codenamexxv.github.io/teacher/" target="_blank" rel="noopener">Ігор Шуляк</a><br>
+            &copy; 2026
+        </footer>
     </div>
 
     <div id="notification" class="notification">Copied to clipboard!</div>
