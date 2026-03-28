@@ -87,6 +87,13 @@
 
         .input-group {
             margin-bottom: 24px;
+            position: relative;
+        }
+
+        .input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: flex-start;
         }
 
         label {
@@ -108,15 +115,103 @@
             background: #fdfdfd;
         }
 
+        textarea {
+            padding-right: 80px;
+            min-height: 120px;
+            resize: vertical;
+        }
+
         textarea:focus, select:focus {
             outline: none;
             border-color: var(--primary);
             box-shadow: 0 0 0 3px rgba(94, 84, 142, 0.12);
         }
 
-        textarea {
-            min-height: 120px;
-            resize: vertical;
+        /* Voice Button Styles */
+        .voice-btn {
+            position: absolute;
+            right: 12px;
+            top: 12px;
+            width: 40px;
+            height: 40px;
+            border: none;
+            border-radius: 10px;
+            background: var(--primary);
+            color: white;
+            font-size: 1.2em;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            z-index: 10;
+            box-shadow: 0 2px 8px rgba(94, 84, 142, 0.3);
+        }
+
+        .voice-btn:hover:not(:disabled) {
+            background: var(--primary-light);
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(94, 84, 142, 0.4);
+        }
+
+        .voice-btn:active:not(:disabled) {
+            transform: scale(0.95);
+        }
+
+        .voice-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .voice-btn.recording {
+            background: var(--danger);
+            animation: pulse 1.5s infinite;
+        }
+
+        .voice-btn.recording:hover {
+            background: #c82333;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7);
+            }
+            50% {
+                box-shadow: 0 0 0 12px rgba(220, 53, 69, 0);
+            }
+        }
+
+        .voice-btn.clear-mode {
+            background: var(--text-muted);
+        }
+
+        .voice-btn.clear-mode:hover {
+            background: var(--danger);
+        }
+
+        /* Tooltip for voice button */
+        .voice-btn::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 100%;
+            right: 0;
+            background: var(--secondary);
+            color: white;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 0.75em;
+            white-space: nowrap;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(5px);
+            transition: all 0.2s ease;
+            margin-bottom: 8px;
+        }
+
+        .voice-btn:hover::after {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
         }
 
         .checkbox-group {
@@ -437,6 +532,15 @@
                 flex-direction: column;
                 align-items: flex-start;
             }
+            .voice-btn {
+                width: 36px;
+                height: 36px;
+                right: 8px;
+                top: 8px;
+            }
+            textarea {
+                padding-right: 70px;
+            }
         }
     </style>
 </head>
@@ -447,7 +551,12 @@
 
         <div class="input-group">
             <label for="words">Enter English words (comma or line separated):</label>
-            <textarea id="words" placeholder="book, pen, table&#10;house&#10;car, dog"></textarea>
+            <div class="input-wrapper">
+                <textarea id="words" placeholder="book, pen, table&#10;house&#10;car, dog"></textarea>
+                <button class="voice-btn" id="voiceBtn" data-tooltip="Voice input" title="Click to start voice input">
+                    <i class="fas fa-microphone"></i>
+                </button>
+            </div>
         </div>
 
         <div class="input-group">
@@ -582,6 +691,7 @@
         const genTimeEl = document.getElementById('genTime');
         const genStatusEl = document.getElementById('genStatus');
         const statusIcon = document.getElementById('statusIcon');
+        const voiceBtn = document.getElementById('voiceBtn');
 
         const showIPARadio = document.getElementById('showIPA');
         const showCyrillicRadio = document.getElementById('showCyrillic');
@@ -678,6 +788,180 @@
         let processedWords = 0;
         let errorCount = 0;
         let currentTranscriptionType = 'ipa';
+
+        // Voice Recognition Setup
+        let recognition = null;
+        let isRecording = false;
+        let shouldKeepListening = false;
+        let lastResultIndex = 0;  // ✅ Track last processed result
+
+        // Initialize Speech Recognition
+        function initSpeechRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            
+            if (!SpeechRecognition) {
+                voiceBtn.disabled = true;
+                voiceBtn.setAttribute('data-tooltip', 'Not supported in this browser');
+                console.warn('Speech Recognition API is not supported in this browser.');
+                return false;
+            }
+
+            recognition = new SpeechRecognition();
+            recognition.lang = 'en-US';
+            recognition.continuous = true;  // ✅ Continuous listening
+            recognition.interimResults = false;  // ✅ Only final results
+            recognition.maxAlternatives = 1;
+
+            recognition.onstart = function() {
+                isRecording = true;
+                lastResultIndex = 0;  // ✅ Reset result index
+                voiceBtn.classList.add('recording');
+                voiceBtn.innerHTML = '<i class="fas fa-stop"></i>';
+                voiceBtn.setAttribute('data-tooltip', 'Click to stop');
+            };
+
+            recognition.onresult = function(event) {
+                // ✅ Get ONLY the new results (not already processed)
+                for (let i = lastResultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript.trim();
+                    
+                    if (transcript) {
+                        // ✅ Each word/phrase on NEW LINE
+                        const currentValue = wordsInput.value.trim();
+                        if (currentValue) {
+                            wordsInput.value = currentValue + '\n' + transcript;
+                        } else {
+                            wordsInput.value = transcript;
+                        }
+                        
+                        showNotification('🎤 Recognized: ' + transcript);
+                    }
+                    
+                    lastResultIndex = i + 1;  // ✅ Update last processed index
+                }
+                
+                // Trigger existing search/update logic
+                updateVoiceButton();
+            };
+
+            recognition.onerror = function(event) {
+                console.error('Speech recognition error:', event.error);
+                
+                if (event.error === 'no-speech') {
+                    // Ignore no-speech errors during continuous listening
+                    if (!shouldKeepListening) {
+                        showNotification('⚠️ No speech detected. Please try again.', true);
+                    }
+                } else if (event.error === 'audio-capture') {
+                    showNotification('⚠️ No microphone found. Please allow microphone access.', true);
+                    stopRecording();
+                } else if (event.error === 'not-allowed') {
+                    showNotification('⚠️ Microphone permission denied.', true);
+                    stopRecording();
+                } else if (event.error === 'aborted') {
+                    // Normal stop, do nothing
+                } else {
+                    showNotification('⚠️ Voice recognition error: ' + event.error, true);
+                }
+            };
+
+            recognition.onend = function() {
+                // ✅ Restart if shouldKeepListening is true
+                if (shouldKeepListening && isRecording) {
+                    try {
+                        recognition.start();
+                    } catch (e) {
+                        console.log('Recognition restart failed:', e);
+                        stopRecording();
+                    }
+                } else {
+                    stopRecording();
+                }
+            };
+
+            return true;
+        }
+
+        // Start Voice Input
+        function startVoiceInput() {
+            if (!recognition) {
+                const initialized = initSpeechRecognition();
+                if (!initialized) {
+                    showNotification('⚠️ Voice input is not supported in your browser.', true);
+                    return;
+                }
+            }
+
+            if (isRecording) {
+                stopRecording();
+                return;
+            }
+
+            try {
+                shouldKeepListening = true;  // ✅ Keep listening until manually stopped
+                recognition.start();
+                showNotification('🎤 Listening... Click the button to stop');
+            } catch (error) {
+                console.error('Error starting recognition:', error);
+                showNotification('⚠️ Failed to start voice input.', true);
+                stopRecording();
+            }
+        }
+
+        // Stop Recording
+        function stopRecording() {
+            shouldKeepListening = false;  // ✅ Stop the restart cycle
+            isRecording = false;
+            lastResultIndex = 0;  // ✅ Reset for next session
+            
+            if (recognition) {
+                try {
+                    recognition.stop();
+                } catch (e) {
+                    console.log('Recognition stop failed:', e);
+                }
+            }
+            
+            voiceBtn.classList.remove('recording');
+            voiceBtn.innerHTML = '<i class="fas fa-microphone"></i>';
+            voiceBtn.setAttribute('data-tooltip', 'Voice input');
+            
+            updateVoiceButton();
+        }
+
+        // Update Voice Button State
+        function updateVoiceButton() {
+            const hasText = wordsInput.value.trim().length > 0;
+            
+            // Don't change button if recording
+            if (isRecording) {
+                return;
+            }
+            
+            if (hasText) {
+                voiceBtn.classList.add('clear-mode');
+                voiceBtn.innerHTML = '<i class="fas fa-times"></i>';
+                voiceBtn.setAttribute('data-tooltip', 'Clear text');
+                voiceBtn.onclick = clearText;
+            } else {
+                voiceBtn.classList.remove('clear-mode');
+                voiceBtn.innerHTML = '<i class="fas fa-microphone"></i>';
+                voiceBtn.setAttribute('data-tooltip', 'Voice input');
+                voiceBtn.onclick = startVoiceInput;
+            }
+        }
+
+        // Clear Text
+        function clearText() {
+            wordsInput.value = '';
+            updateVoiceButton();
+            wordsInput.focus();
+        }
+
+        // Event Listeners for Voice Button
+        wordsInput.addEventListener('input', updateVoiceButton);
+        wordsInput.addEventListener('focus', updateVoiceButton);
+        wordsInput.addEventListener('blur', updateVoiceButton);
 
         wordsInput.addEventListener('input', updateUI);
         showIPARadio.addEventListener('change', updateTranscriptionType);
@@ -1232,8 +1516,11 @@
             setTimeout(() => el.classList.remove('show'), 3000);
         }
 
+        // Initialize on page load
+        initSpeechRecognition();
         updateTranscriptionType();
         updateUI();
+        updateVoiceButton();
     </script>
 </body>
 </html>
