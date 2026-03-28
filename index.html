@@ -127,7 +127,6 @@
             box-shadow: 0 0 0 3px rgba(94, 84, 142, 0.12);
         }
 
-        /* Voice Button Styles */
         .voice-btn {
             position: absolute;
             right: 12px;
@@ -189,7 +188,6 @@
             background: var(--danger);
         }
 
-        /* Tooltip for voice button */
         .voice-btn::after {
             content: attr(data-tooltip);
             position: absolute;
@@ -793,7 +791,9 @@
         let recognition = null;
         let isRecording = false;
         let shouldKeepListening = false;
-        let lastResultIndex = 0;  // ✅ Track last processed result
+        let lastTranscript = '';
+        let commitTimeout = null;  // ✅ Timeout for phrase commitment
+        const PHRASE_DELAY = 1500;  // ✅ 1.5 second delay before committing phrase
 
         // Initialize Speech Recognition
         function initSpeechRecognition() {
@@ -808,47 +808,42 @@
 
             recognition = new SpeechRecognition();
             recognition.lang = 'en-US';
-            recognition.continuous = true;  // ✅ Continuous listening
-            recognition.interimResults = false;  // ✅ Only final results
+            recognition.continuous = true;
+            recognition.interimResults = false;
             recognition.maxAlternatives = 1;
 
             recognition.onstart = function() {
                 isRecording = true;
-                lastResultIndex = 0;  // ✅ Reset result index
+                lastTranscript = '';
                 voiceBtn.classList.add('recording');
                 voiceBtn.innerHTML = '<i class="fas fa-stop"></i>';
                 voiceBtn.setAttribute('data-tooltip', 'Click to stop');
             };
 
             recognition.onresult = function(event) {
-                // ✅ Get ONLY the new results (not already processed)
-                for (let i = lastResultIndex; i < event.results.length; i++) {
-                    const transcript = event.results[i][0].transcript.trim();
+                const resultIndex = event.results.length - 1;
+                const transcript = event.results[resultIndex][0].transcript.trim();
+                const isFinal = event.results[resultIndex].isFinal;
+                
+                if (transcript && transcript !== lastTranscript) {
+                    lastTranscript = transcript;
                     
-                    if (transcript) {
-                        // ✅ Each word/phrase on NEW LINE
-                        const currentValue = wordsInput.value.trim();
-                        if (currentValue) {
-                            wordsInput.value = currentValue + '\n' + transcript;
-                        } else {
-                            wordsInput.value = transcript;
-                        }
-                        
-                        showNotification('🎤 Recognized: ' + transcript);
+                    // ✅ Clear existing timeout (user is still speaking)
+                    if (commitTimeout) {
+                        clearTimeout(commitTimeout);
                     }
                     
-                    lastResultIndex = i + 1;  // ✅ Update last processed index
+                    // ✅ Set new timeout to commit phrase after delay
+                    commitTimeout = setTimeout(() => {
+                        commitPhrase(transcript);
+                    }, PHRASE_DELAY);
                 }
-                
-                // Trigger existing search/update logic
-                updateVoiceButton();
             };
 
             recognition.onerror = function(event) {
                 console.error('Speech recognition error:', event.error);
                 
                 if (event.error === 'no-speech') {
-                    // Ignore no-speech errors during continuous listening
                     if (!shouldKeepListening) {
                         showNotification('⚠️ No speech detected. Please try again.', true);
                     }
@@ -859,14 +854,21 @@
                     showNotification('⚠️ Microphone permission denied.', true);
                     stopRecording();
                 } else if (event.error === 'aborted') {
-                    // Normal stop, do nothing
+                    // Normal stop
                 } else {
                     showNotification('⚠️ Voice recognition error: ' + event.error, true);
                 }
             };
 
             recognition.onend = function() {
-                // ✅ Restart if shouldKeepListening is true
+                // ✅ Commit any pending phrase before stopping
+                if (commitTimeout) {
+                    clearTimeout(commitTimeout);
+                    if (lastTranscript) {
+                        commitPhrase(lastTranscript);
+                    }
+                }
+                
                 if (shouldKeepListening && isRecording) {
                     try {
                         recognition.start();
@@ -880,6 +882,22 @@
             };
 
             return true;
+        }
+
+        // ✅ Commit phrase to textarea (each phrase on new line)
+        function commitPhrase(phrase) {
+            if (!phrase.trim()) return;
+            
+            const currentValue = wordsInput.value.trim();
+            if (currentValue) {
+                wordsInput.value = currentValue + '\n' + phrase.trim();
+            } else {
+                wordsInput.value = phrase.trim();
+            }
+            
+            showNotification('🎤 Recognized: ' + phrase);
+            updateVoiceButton();
+            lastTranscript = '';  // Reset for next phrase
         }
 
         // Start Voice Input
@@ -898,7 +916,7 @@
             }
 
             try {
-                shouldKeepListening = true;  // ✅ Keep listening until manually stopped
+                shouldKeepListening = true;
                 recognition.start();
                 showNotification('🎤 Listening... Click the button to stop');
             } catch (error) {
@@ -910,9 +928,19 @@
 
         // Stop Recording
         function stopRecording() {
-            shouldKeepListening = false;  // ✅ Stop the restart cycle
+            shouldKeepListening = false;
             isRecording = false;
-            lastResultIndex = 0;  // ✅ Reset for next session
+            
+            // ✅ Commit any pending phrase
+            if (commitTimeout) {
+                clearTimeout(commitTimeout);
+                commitTimeout = null;
+            }
+            if (lastTranscript) {
+                commitPhrase(lastTranscript);
+            }
+            
+            lastTranscript = '';
             
             if (recognition) {
                 try {
@@ -933,7 +961,6 @@
         function updateVoiceButton() {
             const hasText = wordsInput.value.trim().length > 0;
             
-            // Don't change button if recording
             if (isRecording) {
                 return;
             }
