@@ -115,6 +115,16 @@
         }
         textarea { min-height: 110px; resize: vertical; padding-right: 58px; }
         textarea:focus, select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(94, 84, 142, 0.12); }
+      
+        .logo-icon {
+            width: 1.2em;
+            height: 1.2em;
+            vertical-align: middle;
+            margin-right: 6px;
+            object-fit: contain;
+            display: inline-block;
+            flex-shrink: 0;
+  }
 
         .voice-btn {
             position: absolute; right: 10px; top: 10px;
@@ -249,7 +259,7 @@
 </head>
 <body>
 <div class="container">
-    <h1>🧑‍🏫 Voc+</h1>
+    <h1><img src="https://raw.githubusercontent.com/CodenameXXV/voc/refs/heads/main/dictionary.png" alt="Voc+" class="logo-icon"> Voc+</h1>
     <p class="subtitle">Vocabulary table generator for English teachers</p>
 
     <!-- Mode Toggle -->
